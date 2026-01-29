@@ -44,11 +44,18 @@ inputs:
   github-environment:
     description: 'GitHub environment name - merges wrangler.{github-environment}.jsonc into base config if it exists'
     required: false
+  mode:
+    description: 'Action mode: full (build+deploy), build (upload only), or deploy (deploy existing version)'
+    required: false
+    default: 'full'
+  version-id:
+    description: 'Worker Version ID to deploy (required when mode is deploy)'
+    required: false
 
 outputs:
   version-id:
-    description: 'The deployed Worker Version ID'
-    value: ${{ steps.deploy.outputs.version-id }}
+    description: 'The uploaded/deployed Worker Version ID'
+    value: ${{ steps.upload.outputs.version-id || inputs.version-id }}
   deploy-tag:
     description: 'The tag used for the deployment'
     value: ${{ steps.vars.outputs.tag }}
@@ -57,6 +64,7 @@ runs:
   using: 'composite'
   steps:
     - name: Setup Node.js
+      if: inputs.mode == 'full' || inputs.mode == 'build'
       uses: actions/setup-node@v4
       with:
         node-version: ${{ inputs.node-version }}
@@ -64,11 +72,13 @@ runs:
         cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
 
     - name: Install dependencies
+      if: inputs.mode == 'full' || inputs.mode == 'build'
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       run: ${{ inputs.install-command }}
 
     - name: Parse build environment variables
+      if: inputs.mode == 'full' || inputs.mode == 'build'
       id: build-env
       shell: bash
       run: |
@@ -76,6 +86,7 @@ runs:
         echo '${{ inputs.build-env }}' | jq -r 'to_entries | .[] | "export \(.key)=\"\(.value)\""' > /tmp/build-env.sh || true
 
     - name: Build Worker
+      if: inputs.mode == 'full' || inputs.mode == 'build'
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       run: |
@@ -86,6 +97,7 @@ runs:
         ${{ inputs.build-command }}
 
     - name: Set deployment variables
+      if: inputs.mode == 'full' || inputs.mode == 'build'
       id: vars
       shell: bash
       run: |
@@ -105,7 +117,7 @@ runs:
 
     - name: Merge wrangler config for environment
       id: wrangler-config
-      if: inputs.github-environment != ''
+      if: inputs.github-environment != '' && (inputs.mode == 'full' || inputs.mode == 'build')
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       run: |
@@ -178,8 +190,9 @@ runs:
 
         echo "config-path=/tmp/wrangler-merged.json" >> $GITHUB_OUTPUT
 
-    - name: Upload and Deploy Worker Version
-      id: deploy
+    - name: Upload Worker Version
+      if: inputs.mode == 'full' || inputs.mode == 'build'
+      id: upload
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
@@ -207,13 +220,32 @@ runs:
         fi
 
         echo "version-id=$VERSION_ID" >> $GITHUB_OUTPUT
+        echo "Uploaded version: $VERSION_ID"
+
+    - name: Deploy Worker Version
+      if: inputs.mode == 'full' || inputs.mode == 'deploy'
+      id: deploy
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare-api-token }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare-account-id }}
+      run: |
+        # Get version ID from upload step or input
+        VERSION_ID="${{ steps.upload.outputs.version-id || inputs.version-id }}"
+
+        if [ -z "$VERSION_ID" ]; then
+          echo "::error::No version ID available. In deploy mode, you must provide version-id input."
+          exit 1
+        fi
+
         echo "Deploying version: $VERSION_ID"
 
         # Deploy the version at 100%
-        npx wrangler versions deploy $CONFIG_FLAG "${VERSION_ID}@100%" -y
+        npx wrangler versions deploy "${VERSION_ID}@100%" -y
 
     - name: Upload secrets to Cloudflare
-      if: inputs.secrets-json != '' && inputs.secrets-json != '{}'
+      if: (inputs.mode == 'full' || inputs.mode == 'deploy') && inputs.secrets-json != '' && inputs.secrets-json != '{}'
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:

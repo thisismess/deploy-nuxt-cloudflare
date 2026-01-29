@@ -10,6 +10,7 @@ A reusable GitHub Action to build and deploy Nuxt applications to Cloudflare Wor
 - Automatic secrets upload to Cloudflare Workers
 - Configurable Node.js version
 - Works with npm, pnpm, or yarn
+- Build/deploy modes for parallel CI workflows
 
 ## Usage
 
@@ -155,6 +156,67 @@ jobs:
             }
 ```
 
+### Parallel Builds with Separate Deploy
+
+Use `mode: build` to upload worker versions in parallel, then deploy after other jobs complete. This is useful when you have multiple deployments (e.g., GKE + Cloudflare Workers) and want to build in parallel but deploy sequentially.
+
+```yaml
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  # Build jobs run in parallel
+  build-worker:
+    runs-on: ubuntu-latest
+    outputs:
+      version-id: ${{ steps.build.outputs.version-id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: thisismess/deploy-nuxt-cloudflare@v1
+        id: build
+        with:
+          cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          worker-name: my-nuxt-app
+          github-environment: production
+          mode: build  # Only build and upload, don't deploy
+
+  build-gke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # ... GKE build steps ...
+
+  # Deploy jobs run after builds complete
+  deploy-gke:
+    needs: [build-gke]
+    runs-on: ubuntu-latest
+    steps:
+      # ... GKE deploy steps ...
+
+  deploy-worker:
+    needs: [build-worker, deploy-gke]  # Wait for GKE deploy
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: thisismess/deploy-nuxt-cloudflare@v1
+        with:
+          cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          worker-name: my-nuxt-app
+          mode: deploy  # Only deploy existing version
+          version-id: ${{ needs.build-worker.outputs.version-id }}
+```
+
+**Modes:**
+- `full` (default): Build, upload, and deploy in one step
+- `build`: Build and upload only, outputs `version-id` for later deployment
+- `deploy`: Deploy an existing version using provided `version-id`
+
 ## Inputs
 
 | Input | Description | Required | Default |
@@ -171,13 +233,15 @@ jobs:
 | `deploy-tag` | Tag for the deployment | No | Short SHA |
 | `deploy-message` | Message for the deployment | No | `{actor} - {sha}` |
 | `github-environment` | GitHub environment name - merges `wrangler.{environment}.jsonc` into base config | No | - |
+| `mode` | Action mode: `full` (build+deploy), `build` (upload only), or `deploy` (deploy existing version) | No | `full` |
+| `version-id` | Worker Version ID to deploy (required when `mode` is `deploy`) | No | - |
 
 ## Outputs
 
 | Output | Description |
 |--------|-------------|
-| `version-id` | The deployed Worker Version ID |
-| `deploy-tag` | The tag used for the deployment |
+| `version-id` | The uploaded/deployed Worker Version ID (from upload in `build`/`full` mode, or passed through in `deploy` mode) |
+| `deploy-tag` | The tag used for the deployment (only set in `build`/`full` mode) |
 
 ## Requirements
 
