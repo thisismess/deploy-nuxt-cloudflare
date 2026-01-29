@@ -173,21 +173,22 @@ runs:
 
         echo "Merging $ENV_FILE into $NITRO_CONFIG..."
 
-        node --eval "
-        const fs = require('fs');
+        # Pass file paths via environment variables to avoid escaping issues
+        NITRO_CONFIG="$NITRO_CONFIG" ENV_FILE="$ENV_FILE" node --eval '
+        const fs = require("fs");
 
         // Strip JSONC comments
         function stripJsonComments(str) {
           return str
-            .replace(/\/\*[\s\S]*?\*\//g, '')
-            .replace(/\/\/.*/g, '');
+            .replace(/\/\*[\s\S]*?\*\//g, "")
+            .replace(/\/\/.*/g, "");
         }
 
         // Deep merge objects
         function deepMerge(target, source) {
           const result = { ...target };
           for (const key of Object.keys(source)) {
-            if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+            if (source[key] && typeof source[key] === "object" && !Array.isArray(source[key])) {
               result[key] = deepMerge(result[key] || {}, source[key]);
             } else {
               result[key] = source[key];
@@ -196,22 +197,25 @@ runs:
           return result;
         }
 
+        const nitroConfigPath = process.env.NITRO_CONFIG;
+        const envFilePath = process.env.ENV_FILE;
+
         // Read Nuxt-generated config (has main, assets, etc.)
-        const nitroConfig = JSON.parse(fs.readFileSync('$NITRO_CONFIG', 'utf8'));
+        const nitroConfig = JSON.parse(fs.readFileSync(nitroConfigPath, "utf8"));
 
         // Read and parse environment config (has bindings, vars, etc.)
-        const envConfig = JSON.parse(stripJsonComments(fs.readFileSync('$ENV_FILE', 'utf8')));
+        const envConfig = JSON.parse(stripJsonComments(fs.readFileSync(envFilePath, "utf8")));
 
         // Merge: Nitro config + environment overrides
         const merged = deepMerge(nitroConfig, envConfig);
 
         // Write merged config back to the Nitro output location
-        fs.writeFileSync('$NITRO_CONFIG', JSON.stringify(merged, null, 2));
+        fs.writeFileSync(nitroConfigPath, JSON.stringify(merged, null, 2));
 
-        console.log('Nitro config:', '$NITRO_CONFIG');
-        console.log('Environment config:', '$ENV_FILE');
-        console.log('Merged config written to:', '$NITRO_CONFIG');
-        "
+        console.log("Nitro config:", nitroConfigPath);
+        console.log("Environment config:", envFilePath);
+        console.log("Merged config written to:", nitroConfigPath);
+        '
 
     - name: Upload Worker Version
       if: inputs.mode == 'full' || inputs.mode == 'build'
