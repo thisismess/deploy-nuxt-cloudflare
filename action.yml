@@ -156,12 +156,22 @@ runs:
         ENV_FILE="wrangler.${{ inputs.github-environment }}.jsonc"
 
         if [ ! -f "$ENV_FILE" ]; then
-          echo "::warning::Environment file $ENV_FILE not found, using base wrangler config"
-          echo "config-path=" >> $GITHUB_OUTPUT
+          echo "::warning::Environment file $ENV_FILE not found, using Nuxt-generated config as-is"
           exit 0
         fi
 
-        echo "Merging $ENV_FILE into base wrangler config..."
+        # Find the Nuxt-generated wrangler config
+        NITRO_CONFIG=""
+        if [ -f ".output/server/wrangler.json" ]; then
+          NITRO_CONFIG=".output/server/wrangler.json"
+        elif [ -f ".output/wrangler.json" ]; then
+          NITRO_CONFIG=".output/wrangler.json"
+        else
+          echo "::error::No Nuxt-generated wrangler.json found in .output/"
+          exit 1
+        fi
+
+        echo "Merging $ENV_FILE into $NITRO_CONFIG..."
 
         node --eval "
         const fs = require('fs');
@@ -186,41 +196,22 @@ runs:
           return result;
         }
 
-        // Find base config (jsonc, json, or toml)
-        let baseConfig = {};
-        let baseFile = '';
+        // Read Nuxt-generated config (has main, assets, etc.)
+        const nitroConfig = JSON.parse(fs.readFileSync('$NITRO_CONFIG', 'utf8'));
 
-        if (fs.existsSync('wrangler.jsonc')) {
-          baseFile = 'wrangler.jsonc';
-          baseConfig = JSON.parse(stripJsonComments(fs.readFileSync(baseFile, 'utf8')));
-        } else if (fs.existsSync('wrangler.json')) {
-          baseFile = 'wrangler.json';
-          baseConfig = JSON.parse(fs.readFileSync(baseFile, 'utf8'));
-        } else if (fs.existsSync('wrangler.toml')) {
-          console.error('Error: wrangler.toml found but environment merging requires wrangler.jsonc or wrangler.json');
-          console.error('Please convert your wrangler.toml to wrangler.jsonc to use environment-specific configs');
-          process.exit(1);
-        } else {
-          console.error('Error: No wrangler config file found');
-          process.exit(1);
-        }
-
-        // Read and parse environment config
+        // Read and parse environment config (has bindings, vars, etc.)
         const envConfig = JSON.parse(stripJsonComments(fs.readFileSync('$ENV_FILE', 'utf8')));
 
-        // Merge configs
-        const merged = deepMerge(baseConfig, envConfig);
+        // Merge: Nitro config + environment overrides
+        const merged = deepMerge(nitroConfig, envConfig);
 
-        // Write merged config to working directory so paths resolve correctly
-        const outputPath = 'wrangler-merged.json';
-        fs.writeFileSync(outputPath, JSON.stringify(merged, null, 2));
+        // Write merged config back to the Nitro output location
+        fs.writeFileSync('$NITRO_CONFIG', JSON.stringify(merged, null, 2));
 
-        console.log('Base config:', baseFile);
-        console.log('Environment config: $ENV_FILE');
-        console.log('Merged config written to:', outputPath);
+        console.log('Nitro config:', '$NITRO_CONFIG');
+        console.log('Environment config:', '$ENV_FILE');
+        console.log('Merged config written to:', '$NITRO_CONFIG');
         "
-
-        echo "config-path=wrangler-merged.json" >> $GITHUB_OUTPUT
 
     - name: Upload Worker Version
       if: inputs.mode == 'full' || inputs.mode == 'build'
@@ -231,15 +222,9 @@ runs:
         CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare-api-token }}
         CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare-account-id }}
       run: |
-        # Use merged config if available
-        CONFIG_FLAG=""
-        if [ -n "${{ steps.wrangler-config.outputs.config-path }}" ]; then
-          CONFIG_FLAG="--config ${{ steps.wrangler-config.outputs.config-path }}"
-        fi
-
-        # Upload and capture version ID (use tee to show output in real-time)
+        # Upload from .output directory where Nuxt generates the wrangler config
         set -o pipefail
-        OUTPUT=$(npx wrangler versions upload $CONFIG_FLAG \
+        OUTPUT=$(npx wrangler versions upload --cwd .output \
           --tag "${{ steps.vars.outputs.tag }}" \
           --message "${{ steps.vars.outputs.message }}" 2>&1 | tee /dev/stderr)
 
