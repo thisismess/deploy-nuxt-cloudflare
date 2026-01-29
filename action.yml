@@ -237,17 +237,16 @@ runs:
           CONFIG_FLAG="--config ${{ steps.wrangler-config.outputs.config-path }}"
         fi
 
-        # Upload and capture version ID
+        # Upload and capture version ID (use tee to show output in real-time)
+        set -o pipefail
         OUTPUT=$(npx wrangler versions upload $CONFIG_FLAG \
           --tag "${{ steps.vars.outputs.tag }}" \
-          --message "${{ steps.vars.outputs.message }}" 2>&1)
-
-        echo "$OUTPUT"
+          --message "${{ steps.vars.outputs.message }}" 2>&1 | tee /dev/stderr)
 
         VERSION_ID=$(echo "$OUTPUT" | grep "Worker Version ID:" | awk '{print $4}')
 
         if [ -z "$VERSION_ID" ]; then
-          echo "Failed to get Worker Version ID"
+          echo "::error::Failed to get Worker Version ID from wrangler output"
           exit 1
         fi
 
