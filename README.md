@@ -61,18 +61,10 @@ Use GitHub environments to manage different Cloudflare bindings (KV, D1, R2, etc
 
 **1. Create environment-specific config files:**
 
-```jsonc
-// wrangler.jsonc (base config)
-{
-  "name": "my-nuxt-app",
-  "main": ".output/server/index.mjs",
-  "compatibility_date": "2024-01-01",
-  "assets": { "directory": ".output/public" }
-}
-```
+Nuxt/Nitro generates the base wrangler config during build (with `main`, `assets`, etc.). You only need to create environment-specific files with your bindings:
 
 ```jsonc
-// wrangler.production.jsonc (production overrides)
+// wrangler.production.jsonc (production bindings)
 {
   "kv_namespaces": [
     { "binding": "CACHE", "id": "abc123-prod-kv-id" }
@@ -87,7 +79,7 @@ Use GitHub environments to manage different Cloudflare bindings (KV, D1, R2, etc
 ```
 
 ```jsonc
-// wrangler.staging.jsonc (staging overrides)
+// wrangler.staging.jsonc (staging bindings)
 {
   "kv_namespaces": [
     { "binding": "CACHE", "id": "def456-staging-kv-id" }
@@ -100,6 +92,8 @@ Use GitHub environments to manage different Cloudflare bindings (KV, D1, R2, etc
   }
 }
 ```
+
+The action merges your environment file into the Nuxt-generated `.output/server/wrangler.json` after the build step.
 
 **2. Configure your workflow with GitHub environments:**
 
@@ -246,8 +240,8 @@ jobs:
 
 ## Requirements
 
-- Your Nuxt project must have a wrangler config file (`wrangler.toml`, `wrangler.jsonc`, or `wrangler.json`)
-- To use `github-environment` for environment-specific bindings, you must use `wrangler.jsonc` or `wrangler.json` (not `.toml`)
+- Nuxt must be configured to build for Cloudflare Workers (Nitro generates the wrangler config automatically)
+- To use `github-environment` for environment-specific bindings, create `wrangler.{environment}.jsonc` files
 - The Cloudflare API token needs `Workers Scripts:Edit` permission
 
 ## License
