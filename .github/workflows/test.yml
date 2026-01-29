@@ -1,0 +1,29 @@
+name: Test Action
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Lint Action
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate action.yml
+        run: |
+          # Check that action.yml is valid YAML
+          python3 -c "import yaml; yaml.safe_load(open('action.yml'))"
+          echo "action.yml is valid YAML"
+
+      - name: Check required fields
+        run: |
+          # Verify required fields exist
+          grep -q "name:" action.yml
+          grep -q "description:" action.yml
+          grep -q "runs:" action.yml
+          grep -q "using: 'composite'" action.yml
+          echo "All required fields present"

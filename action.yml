@@ -1,0 +1,141 @@
+name: 'Deploy Nuxt to Cloudflare Workers'
+description: 'Build and deploy a Nuxt application to Cloudflare Workers with versioned deployments'
+author: 'This is Mess'
+
+branding:
+  icon: 'upload-cloud'
+  color: 'orange'
+
+inputs:
+  cloudflare-api-token:
+    description: 'Cloudflare API Token with Workers permissions'
+    required: true
+  cloudflare-account-id:
+    description: 'Cloudflare Account ID'
+    required: true
+  worker-name:
+    description: 'Name of the Cloudflare Worker'
+    required: true
+  working-directory:
+    description: 'Path to Nuxt project directory'
+    default: '.'
+  node-version:
+    description: 'Node.js version to use'
+    default: '20'
+  build-command:
+    description: 'Command to build the Nuxt app'
+    default: 'npm run build'
+  install-command:
+    description: 'Command to install dependencies'
+    default: 'npm ci'
+  build-env:
+    description: 'JSON object of environment variables for build step'
+    required: false
+    default: '{}'
+  secrets-json:
+    description: 'JSON object of secrets to upload to Cloudflare Worker'
+    required: false
+  deploy-tag:
+    description: 'Tag for the deployment (defaults to short SHA)'
+    required: false
+  deploy-message:
+    description: 'Message for the deployment'
+    required: false
+
+outputs:
+  version-id:
+    description: 'The deployed Worker Version ID'
+    value: ${{ steps.deploy.outputs.version-id }}
+  deploy-tag:
+    description: 'The tag used for the deployment'
+    value: ${{ steps.vars.outputs.tag }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: 'npm'
+        cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+
+    - name: Install dependencies
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: ${{ inputs.install-command }}
+
+    - name: Parse build environment variables
+      id: build-env
+      shell: bash
+      run: |
+        # Parse JSON and export as environment variables
+        echo '${{ inputs.build-env }}' | jq -r 'to_entries | .[] | "export \(.key)=\"\(.value)\""' > /tmp/build-env.sh || true
+
+    - name: Build Worker
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        # Source build environment variables if they exist
+        if [ -f /tmp/build-env.sh ]; then
+          source /tmp/build-env.sh
+        fi
+        ${{ inputs.build-command }}
+
+    - name: Set deployment variables
+      id: vars
+      shell: bash
+      run: |
+        # Use provided tag or default to short SHA
+        if [ -n "${{ inputs.deploy-tag }}" ]; then
+          echo "tag=${{ inputs.deploy-tag }}" >> $GITHUB_OUTPUT
+        else
+          echo "tag=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+        fi
+
+        # Use provided message or default
+        if [ -n "${{ inputs.deploy-message }}" ]; then
+          echo "message=${{ inputs.deploy-message }}" >> $GITHUB_OUTPUT
+        else
+          echo "message=${{ github.actor }} - ${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Upload and Deploy Worker Version
+      id: deploy
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare-api-token }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare-account-id }}
+      run: |
+        # Upload and capture version ID
+        OUTPUT=$(npx wrangler versions upload \
+          --tag "${{ steps.vars.outputs.tag }}" \
+          --message "${{ steps.vars.outputs.message }}" 2>&1)
+
+        echo "$OUTPUT"
+
+        VERSION_ID=$(echo "$OUTPUT" | grep "Worker Version ID:" | awk '{print $4}')
+
+        if [ -z "$VERSION_ID" ]; then
+          echo "Failed to get Worker Version ID"
+          exit 1
+        fi
+
+        echo "version-id=$VERSION_ID" >> $GITHUB_OUTPUT
+        echo "Deploying version: $VERSION_ID"
+
+        # Deploy the version at 100%
+        npx wrangler versions deploy "${VERSION_ID}@100%" -y
+
+    - name: Upload secrets to Cloudflare
+      if: inputs.secrets-json != '' && inputs.secrets-json != '{}'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare-api-token }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare-account-id }}
+      run: |
+        echo '${{ inputs.secrets-json }}' > /tmp/worker-secrets.json
+        npx wrangler secret bulk /tmp/worker-secrets.json --name ${{ inputs.worker-name }}
+        rm -f /tmp/worker-secrets.json
