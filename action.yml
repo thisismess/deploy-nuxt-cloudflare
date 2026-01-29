@@ -185,6 +185,15 @@ runs:
           ' >> /tmp/build-env.sh
         fi
 
+        # Debug: show what will be exported
+        echo "::group::Build environment variables"
+        if [ -f /tmp/build-env.sh ]; then
+          cat /tmp/build-env.sh
+        else
+          echo "No build environment variables set"
+        fi
+        echo "::endgroup::"
+
     - name: Build Worker
       if: ${{ inputs.mode == 'full' || inputs.mode == 'build' }}
       shell: bash
@@ -194,6 +203,12 @@ runs:
         if [ -f /tmp/build-env.sh ]; then
           source /tmp/build-env.sh
         fi
+
+        # Debug: show NUXT_* variables that will be available during build
+        echo "::group::NUXT environment variables for build"
+        env | grep -E "^NUXT_" | sort || echo "No NUXT_* variables set"
+        echo "::endgroup::"
+
         ${{ inputs.build-command }}
 
     - name: Set deployment variables
