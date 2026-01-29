@@ -228,6 +228,7 @@ jobs:
 | `node-version` | Node.js version to use | No | `20` |
 | `build-command` | Command to build the Nuxt app | No | `npm run build` |
 | `install-command` | Command to install dependencies | No | `npm ci` |
+| `package-manager` | Package manager for caching (`npm`, `pnpm`, `yarn`, or `none` to disable) | No | `npm` |
 | `build-env` | JSON object of environment variables for build | No | `{}` |
 | `secrets-json` | JSON object of secrets to upload to Worker | No | - |
 | `deploy-tag` | Tag for the deployment | No | Short SHA |
