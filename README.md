@@ -21,8 +21,10 @@ A reusable GitHub Action to build and deploy Nuxt applications to Cloudflare Wor
   with:
     cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-    worker-name: my-nuxt-app
+    worker-name: my-nuxt-app  # Your Cloudflare Worker name
 ```
+
+> **Note:** The `worker-name` must match your Cloudflare Worker name exactly. This is the name shown in the Cloudflare dashboard under Workers & Pages, and is used for uploading, deploying, and managing secrets.
 
 ### With Build Environment Variables
 
@@ -217,7 +219,7 @@ jobs:
 |-------|-------------|----------|---------|
 | `cloudflare-api-token` | Cloudflare API Token with Workers permissions | Yes | - |
 | `cloudflare-account-id` | Cloudflare Account ID | Yes | - |
-| `worker-name` | Name of the Cloudflare Worker | Yes | - |
+| `worker-name` | Name of your Cloudflare Worker (must match the name in Cloudflare dashboard) | Yes | - |
 | `working-directory` | Path to Nuxt project directory | No | `.` |
 | `node-version` | Node.js version to use | No | `20` |
 | `build-command` | Command to build the Nuxt app | No | `npm run build` |
