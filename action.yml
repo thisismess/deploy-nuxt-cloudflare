@@ -225,6 +225,7 @@ runs:
         # Upload from .output directory where Nuxt generates the wrangler config
         set -o pipefail
         OUTPUT=$(npx wrangler versions upload --cwd .output \
+          --name "${{ inputs.worker-name }}" \
           --tag "${{ steps.vars.outputs.tag }}" \
           --message "${{ steps.vars.outputs.message }}" 2>&1 | tee /dev/stderr)
 
