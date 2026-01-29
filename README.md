@@ -21,10 +21,10 @@ A reusable GitHub Action to build and deploy Nuxt applications to Cloudflare Wor
   with:
     cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-    worker-name: my-nuxt-app  # Your Cloudflare Worker name
+    worker-name: ${{ secrets.CLOUDFLARE_WORKER_NAME }}
 ```
 
-> **Note:** The `worker-name` must match your Cloudflare Worker name exactly. This is the name shown in the Cloudflare dashboard under Workers & Pages, and is used for uploading, deploying, and managing secrets.
+> **Note:** The `worker-name` must match your Cloudflare Worker name exactly. This is the name shown in the Cloudflare dashboard under Workers & Pages.
 
 ### With Build Environment Variables
 
@@ -33,7 +33,7 @@ A reusable GitHub Action to build and deploy Nuxt applications to Cloudflare Wor
   with:
     cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-    worker-name: my-nuxt-app
+    worker-name: ${{ secrets.CLOUDFLARE_WORKER_NAME }}
     working-directory: src/nuxt
     build-env: |
       {
@@ -49,7 +49,7 @@ A reusable GitHub Action to build and deploy Nuxt applications to Cloudflare Wor
   with:
     cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-    worker-name: my-nuxt-app
+    worker-name: ${{ secrets.CLOUDFLARE_WORKER_NAME }}
     secrets-json: |
       {
         "API_SECRET_KEY": "${{ secrets.API_SECRET_KEY }}",
@@ -117,7 +117,7 @@ jobs:
         with:
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          worker-name: my-nuxt-app
+          worker-name: ${{ secrets.CLOUDFLARE_WORKER_NAME }}
           github-environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
 ```
 
@@ -143,7 +143,7 @@ jobs:
         with:
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          worker-name: my-nuxt-app
+          worker-name: ${{ secrets.CLOUDFLARE_WORKER_NAME }}
           github-environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
           build-env: |
             {
@@ -177,7 +177,7 @@ jobs:
         with:
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          worker-name: my-nuxt-app
+          worker-name: ${{ secrets.CLOUDFLARE_WORKER_NAME }}
           github-environment: production
           mode: build  # Only build and upload, don't deploy
 
@@ -203,7 +203,7 @@ jobs:
         with:
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          worker-name: my-nuxt-app
+          worker-name: ${{ secrets.CLOUDFLARE_WORKER_NAME }}
           mode: deploy  # Only deploy existing version
           version-id: ${{ needs.build-worker.outputs.version-id }}
 ```
