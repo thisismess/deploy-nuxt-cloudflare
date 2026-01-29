@@ -80,6 +80,12 @@ runs:
           echo "path=${{ inputs.working-directory }}/package-lock.json" >> $GITHUB_OUTPUT
         fi
 
+    - name: Setup pnpm
+      if: (inputs.mode == 'full' || inputs.mode == 'build') && inputs.package-manager == 'pnpm'
+      uses: pnpm/action-setup@v4
+      with:
+        version: latest
+
     - name: Setup Node.js
       if: inputs.mode == 'full' || inputs.mode == 'build'
       uses: actions/setup-node@v4
@@ -87,12 +93,6 @@ runs:
         node-version: ${{ inputs.node-version }}
         cache: ${{ inputs.package-manager != 'none' && inputs.package-manager || '' }}
         cache-dependency-path: ${{ steps.lockfile.outputs.path }}
-
-    - name: Setup pnpm
-      if: (inputs.mode == 'full' || inputs.mode == 'build') && inputs.package-manager == 'pnpm'
-      uses: pnpm/action-setup@v4
-      with:
-        version: latest
 
     - name: Install dependencies
       if: inputs.mode == 'full' || inputs.mode == 'build'
