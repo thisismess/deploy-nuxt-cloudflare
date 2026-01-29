@@ -41,6 +41,9 @@ inputs:
   deploy-message:
     description: 'Message for the deployment'
     required: false
+  github-environment:
+    description: 'GitHub environment name - merges wrangler.{github-environment}.jsonc into base config if it exists'
+    required: false
 
 outputs:
   version-id:
@@ -100,6 +103,81 @@ runs:
           echo "message=${{ github.actor }} - ${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
         fi
 
+    - name: Merge wrangler config for environment
+      id: wrangler-config
+      if: inputs.github-environment != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        ENV_FILE="wrangler.${{ inputs.github-environment }}.jsonc"
+
+        if [ ! -f "$ENV_FILE" ]; then
+          echo "::warning::Environment file $ENV_FILE not found, using base wrangler config"
+          echo "config-path=" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        echo "Merging $ENV_FILE into base wrangler config..."
+
+        node --eval "
+        const fs = require('fs');
+
+        // Strip JSONC comments
+        function stripJsonComments(str) {
+          return str
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/\/\/.*/g, '');
+        }
+
+        // Deep merge objects
+        function deepMerge(target, source) {
+          const result = { ...target };
+          for (const key of Object.keys(source)) {
+            if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+              result[key] = deepMerge(result[key] || {}, source[key]);
+            } else {
+              result[key] = source[key];
+            }
+          }
+          return result;
+        }
+
+        // Find base config (jsonc, json, or toml)
+        let baseConfig = {};
+        let baseFile = '';
+
+        if (fs.existsSync('wrangler.jsonc')) {
+          baseFile = 'wrangler.jsonc';
+          baseConfig = JSON.parse(stripJsonComments(fs.readFileSync(baseFile, 'utf8')));
+        } else if (fs.existsSync('wrangler.json')) {
+          baseFile = 'wrangler.json';
+          baseConfig = JSON.parse(fs.readFileSync(baseFile, 'utf8'));
+        } else if (fs.existsSync('wrangler.toml')) {
+          console.error('Error: wrangler.toml found but environment merging requires wrangler.jsonc or wrangler.json');
+          console.error('Please convert your wrangler.toml to wrangler.jsonc to use environment-specific configs');
+          process.exit(1);
+        } else {
+          console.error('Error: No wrangler config file found');
+          process.exit(1);
+        }
+
+        // Read and parse environment config
+        const envConfig = JSON.parse(stripJsonComments(fs.readFileSync('$ENV_FILE', 'utf8')));
+
+        // Merge configs
+        const merged = deepMerge(baseConfig, envConfig);
+
+        // Write merged config
+        const outputPath = '/tmp/wrangler-merged.json';
+        fs.writeFileSync(outputPath, JSON.stringify(merged, null, 2));
+
+        console.log('Base config:', baseFile);
+        console.log('Environment config: $ENV_FILE');
+        console.log('Merged config written to:', outputPath);
+        "
+
+        echo "config-path=/tmp/wrangler-merged.json" >> $GITHUB_OUTPUT
+
     - name: Upload and Deploy Worker Version
       id: deploy
       shell: bash
@@ -108,8 +186,14 @@ runs:
         CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare-api-token }}
         CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare-account-id }}
       run: |
+        # Use merged config if available
+        CONFIG_FLAG=""
+        if [ -n "${{ steps.wrangler-config.outputs.config-path }}" ]; then
+          CONFIG_FLAG="--config ${{ steps.wrangler-config.outputs.config-path }}"
+        fi
+
         # Upload and capture version ID
-        OUTPUT=$(npx wrangler versions upload \
+        OUTPUT=$(npx wrangler versions upload $CONFIG_FLAG \
           --tag "${{ steps.vars.outputs.tag }}" \
           --message "${{ steps.vars.outputs.message }}" 2>&1)
 
@@ -126,7 +210,7 @@ runs:
         echo "Deploying version: $VERSION_ID"
 
         # Deploy the version at 100%
-        npx wrangler versions deploy "${VERSION_ID}@100%" -y
+        npx wrangler versions deploy $CONFIG_FLAG "${VERSION_ID}@100%" -y
 
     - name: Upload secrets to Cloudflare
       if: inputs.secrets-json != '' && inputs.secrets-json != '{}'

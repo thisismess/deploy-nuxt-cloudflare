@@ -54,6 +54,78 @@ A reusable GitHub Action to build and deploy Nuxt applications to Cloudflare Wor
       }
 ```
 
+### With Environment-Specific Bindings
+
+Use GitHub environments to manage different Cloudflare bindings (KV, D1, R2, etc.) for production vs staging.
+
+**1. Create environment-specific config files:**
+
+```jsonc
+// wrangler.jsonc (base config)
+{
+  "name": "my-nuxt-app",
+  "main": ".output/server/index.mjs",
+  "compatibility_date": "2024-01-01",
+  "assets": { "directory": ".output/public" }
+}
+```
+
+```jsonc
+// wrangler.production.jsonc (production overrides)
+{
+  "kv_namespaces": [
+    { "binding": "CACHE", "id": "abc123-prod-kv-id" }
+  ],
+  "d1_databases": [
+    { "binding": "DB", "database_id": "xyz789-prod-d1-id" }
+  ],
+  "vars": {
+    "ENVIRONMENT": "production"
+  }
+}
+```
+
+```jsonc
+// wrangler.staging.jsonc (staging overrides)
+{
+  "kv_namespaces": [
+    { "binding": "CACHE", "id": "def456-staging-kv-id" }
+  ],
+  "d1_databases": [
+    { "binding": "DB", "database_id": "uvw321-staging-d1-id" }
+  ],
+  "vars": {
+    "ENVIRONMENT": "staging"
+  }
+}
+```
+
+**2. Configure your workflow with GitHub environments:**
+
+```yaml
+name: Deploy
+
+on:
+  push:
+    branches: [main, staging]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: thisismess/deploy-nuxt-cloudflare@v1
+        with:
+          cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          worker-name: my-nuxt-app
+          github-environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+```
+
+The action will deep-merge `wrangler.{github-environment}.jsonc` into the base `wrangler.jsonc` before deploying. This allows multiple branches to share the same environment config, or unique branches to have unique configs.
+
 ### Full Example (Staging + Production)
 
 ```yaml
@@ -66,32 +138,20 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set environment
-        id: env
-        run: |
-          if [ "${{ github.ref_name }}" == "main" ]; then
-            echo "worker=my-app-production" >> $GITHUB_OUTPUT
-            echo "site_url=https://example.com" >> $GITHUB_OUTPUT
-            echo "api_base=https://api.example.com" >> $GITHUB_OUTPUT
-          else
-            echo "worker=my-app-staging" >> $GITHUB_OUTPUT
-            echo "site_url=https://staging.example.com" >> $GITHUB_OUTPUT
-            echo "api_base=https://api.staging.example.com" >> $GITHUB_OUTPUT
-          fi
 
       - uses: thisismess/deploy-nuxt-cloudflare@v1
         with:
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          worker-name: ${{ steps.env.outputs.worker }}
-          working-directory: src/nuxt
+          worker-name: my-nuxt-app
+          github-environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
           build-env: |
             {
-              "NUXT_PUBLIC_SITE_URL": "${{ steps.env.outputs.site_url }}",
-              "NUXT_PUBLIC_API_BASE": "${{ steps.env.outputs.api_base }}"
+              "NUXT_PUBLIC_SITE_URL": "${{ vars.SITE_URL }}",
+              "NUXT_PUBLIC_API_BASE": "${{ vars.API_BASE }}"
             }
 ```
 
@@ -110,6 +170,7 @@ jobs:
 | `secrets-json` | JSON object of secrets to upload to Worker | No | - |
 | `deploy-tag` | Tag for the deployment | No | Short SHA |
 | `deploy-message` | Message for the deployment | No | `{actor} - {sha}` |
+| `github-environment` | GitHub environment name - merges `wrangler.{environment}.jsonc` into base config | No | - |
 
 ## Outputs
 
@@ -120,7 +181,8 @@ jobs:
 
 ## Requirements
 
-- Your Nuxt project must have a `wrangler.toml` configured for Cloudflare Workers
+- Your Nuxt project must have a wrangler config file (`wrangler.toml`, `wrangler.jsonc`, or `wrangler.json`)
+- To use `github-environment` for environment-specific bindings, you must use `wrangler.jsonc` or `wrangler.json` (not `.toml`)
 - The Cloudflare API token needs `Workers Scripts:Edit` permission
 
 ## License
