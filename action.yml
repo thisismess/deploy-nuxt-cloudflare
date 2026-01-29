@@ -177,11 +177,71 @@ runs:
         NITRO_CONFIG="$NITRO_CONFIG" ENV_FILE="$ENV_FILE" node --eval '
         const fs = require("fs");
 
-        // Strip JSONC comments
+        // Strip JSONC comments (handles strings correctly to not break URLs)
         function stripJsonComments(str) {
-          return str
-            .replace(/\/\*[\s\S]*?\*\//g, "")
-            .replace(/\/\/.*/g, "");
+          let result = "";
+          let inString = false;
+          let inLineComment = false;
+          let inBlockComment = false;
+          let i = 0;
+
+          while (i < str.length) {
+            // Check for string boundaries
+            if (!inLineComment && !inBlockComment && str[i] === "\"" && (i === 0 || str[i-1] !== "\\")) {
+              inString = !inString;
+              result += str[i];
+              i++;
+              continue;
+            }
+
+            // Inside a string, just copy characters
+            if (inString) {
+              result += str[i];
+              i++;
+              continue;
+            }
+
+            // Check for line comment start
+            if (!inBlockComment && str.slice(i, i+2) === "//") {
+              inLineComment = true;
+              i += 2;
+              continue;
+            }
+
+            // Check for block comment start
+            if (!inLineComment && str.slice(i, i+2) === "/*") {
+              inBlockComment = true;
+              i += 2;
+              continue;
+            }
+
+            // Check for block comment end
+            if (inBlockComment && str.slice(i, i+2) === "*/") {
+              inBlockComment = false;
+              i += 2;
+              continue;
+            }
+
+            // Check for line comment end (newline)
+            if (inLineComment && (str[i] === "\n" || str[i] === "\r")) {
+              inLineComment = false;
+              result += str[i];
+              i++;
+              continue;
+            }
+
+            // Skip characters in comments
+            if (inLineComment || inBlockComment) {
+              i++;
+              continue;
+            }
+
+            // Normal character
+            result += str[i];
+            i++;
+          }
+
+          return result;
         }
 
         // Deep merge objects
