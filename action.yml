@@ -35,9 +35,6 @@ inputs:
     description: 'JSON object of environment variables for build step'
     required: false
     default: '{}'
-  secrets-json:
-    description: 'JSON object of secrets to upload to Cloudflare Worker'
-    required: false
   deploy-tag:
     description: 'Tag for the deployment (defaults to short SHA)'
     required: false
@@ -388,15 +385,3 @@ runs:
 
         # Deploy the version at 100%
         npx wrangler versions deploy "${VERSION_ID}@100%" --name "${{ inputs.worker-name }}" -y
-
-    - name: Upload secrets to Cloudflare
-      if: ${{ (inputs.mode == 'full' || inputs.mode == 'deploy') && inputs.secrets-json != '' && inputs.secrets-json != '{}' }}
-      shell: bash
-      working-directory: ${{ inputs.working-directory }}
-      env:
-        CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare-api-token }}
-        CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare-account-id }}
-      run: |
-        echo '${{ inputs.secrets-json }}' > /tmp/worker-secrets.json
-        npx wrangler secret bulk /tmp/worker-secrets.json --name ${{ inputs.worker-name }}
-        rm -f /tmp/worker-secrets.json

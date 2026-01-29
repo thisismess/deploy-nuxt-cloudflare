@@ -7,10 +7,10 @@ A reusable GitHub Action to build and deploy Nuxt applications to Cloudflare Wor
 - Builds Nuxt apps for Cloudflare Workers
 - Versioned deployments with tags and messages
 - Support for build-time environment variables
-- Automatic secrets upload to Cloudflare Workers
+- Environment-specific bindings via `wrangler.{env}.jsonc` files
 - Configurable Node.js version
 - Works with npm, pnpm, or yarn
-- Build/deploy modes for parallel CI workflows
+- Build/deploy modes for coordinated CI workflows
 
 ## Usage
 
@@ -39,21 +39,6 @@ A reusable GitHub Action to build and deploy Nuxt applications to Cloudflare Wor
       {
         "NUXT_PUBLIC_API_BASE": "https://api.example.com",
         "NUXT_PUBLIC_SITE_URL": "https://example.com"
-      }
-```
-
-### With Worker Secrets
-
-```yaml
-- uses: thisismess/deploy-nuxt-cloudflare@v1
-  with:
-    cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-    cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-    worker-name: ${{ secrets.CLOUDFLARE_WORKER_NAME }}
-    secrets-json: |
-      {
-        "API_SECRET_KEY": "${{ secrets.API_SECRET_KEY }}",
-        "DATABASE_URL": "${{ secrets.DATABASE_URL }}"
       }
 ```
 
@@ -211,7 +196,6 @@ jobs:
 | `install-command` | Command to install dependencies (auto-detected from `package-manager` if not set) | No | `npm ci` |
 | `package-manager` | Package manager for caching (`npm`, `pnpm`, `yarn`, or `none` to disable) | No | `npm` |
 | `build-env` | JSON object of environment variables for build | No | `{}` |
-| `secrets-json` | JSON object of secrets to upload to Worker | No | - |
 | `deploy-tag` | Tag for the deployment | No | Short SHA |
 | `deploy-message` | Message for the deployment | No | `{actor} - {sha}` |
 | `github-environment` | GitHub environment name - merges `wrangler.{environment}.jsonc` into base config | No | - |
