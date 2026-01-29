@@ -110,9 +110,83 @@ runs:
       if: ${{ inputs.mode == 'full' || inputs.mode == 'build' }}
       id: build-env
       shell: bash
+      working-directory: ${{ inputs.working-directory }}
       run: |
-        # Parse JSON and export as environment variables
+        # Start with user-provided build-env
         echo '${{ inputs.build-env }}' | jq -r 'to_entries | .[] | "export \(.key)=\"\(.value)\""' > /tmp/build-env.sh || true
+
+        # Also extract vars from wrangler environment file if it exists
+        ENV_FILE="wrangler.${{ inputs.github-environment }}.jsonc"
+        if [ -n "${{ inputs.github-environment }}" ] && [ -f "$ENV_FILE" ]; then
+          echo "Extracting vars from $ENV_FILE for build..."
+
+          ENV_FILE="$ENV_FILE" node --eval '
+          const fs = require("fs");
+
+          // Strip JSONC comments (handles strings correctly to not break URLs)
+          function stripJsonComments(str) {
+            let result = "";
+            let inString = false;
+            let inLineComment = false;
+            let inBlockComment = false;
+            let i = 0;
+
+            while (i < str.length) {
+              if (!inLineComment && !inBlockComment && str[i] === "\"" && (i === 0 || str[i-1] !== "\\")) {
+                inString = !inString;
+                result += str[i];
+                i++;
+                continue;
+              }
+              if (inString) {
+                result += str[i];
+                i++;
+                continue;
+              }
+              if (!inBlockComment && str.slice(i, i+2) === "//") {
+                inLineComment = true;
+                i += 2;
+                continue;
+              }
+              if (!inLineComment && str.slice(i, i+2) === "/*") {
+                inBlockComment = true;
+                i += 2;
+                continue;
+              }
+              if (inBlockComment && str.slice(i, i+2) === "*/") {
+                inBlockComment = false;
+                i += 2;
+                continue;
+              }
+              if (inLineComment && (str[i] === "\n" || str[i] === "\r")) {
+                inLineComment = false;
+                result += str[i];
+                i++;
+                continue;
+              }
+              if (inLineComment || inBlockComment) {
+                i++;
+                continue;
+              }
+              result += str[i];
+              i++;
+            }
+            return result;
+          }
+
+          const envFilePath = process.env.ENV_FILE;
+          const envConfig = JSON.parse(stripJsonComments(fs.readFileSync(envFilePath, "utf8")));
+
+          // Extract vars and output as shell exports
+          if (envConfig.vars) {
+            for (const [key, value] of Object.entries(envConfig.vars)) {
+              // Escape double quotes in value
+              const escaped = String(value).replace(/"/g, "\\\"");
+              console.log(`export ${key}="${escaped}"`);
+            }
+          }
+          ' >> /tmp/build-env.sh
+        fi
 
     - name: Build Worker
       if: ${{ inputs.mode == 'full' || inputs.mode == 'build' }}
