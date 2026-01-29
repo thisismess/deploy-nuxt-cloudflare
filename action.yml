@@ -67,7 +67,7 @@ runs:
   using: 'composite'
   steps:
     - name: Determine lockfile path
-      if: (inputs.mode == 'full' || inputs.mode == 'build') && inputs.package-manager != 'none'
+      if: ${{ (inputs.mode == 'full' || inputs.mode == 'build') && inputs.package-manager != 'none' }}
       id: lockfile
       shell: bash
       working-directory: ${{ inputs.working-directory }}
@@ -81,13 +81,13 @@ runs:
         fi
 
     - name: Setup pnpm
-      if: (inputs.mode == 'full' || inputs.mode == 'build') && inputs.package-manager == 'pnpm'
+      if: ${{ (inputs.mode == 'full' || inputs.mode == 'build') && inputs.package-manager == 'pnpm' }}
       uses: pnpm/action-setup@v4
       with:
         version: latest
 
     - name: Setup Node.js
-      if: inputs.mode == 'full' || inputs.mode == 'build'
+      if: ${{ inputs.mode == 'full' || inputs.mode == 'build' }}
       uses: actions/setup-node@v4
       with:
         node-version: ${{ inputs.node-version }}
@@ -95,7 +95,7 @@ runs:
         cache-dependency-path: ${{ steps.lockfile.outputs.path }}
 
     - name: Install dependencies
-      if: inputs.mode == 'full' || inputs.mode == 'build'
+      if: ${{ inputs.mode == 'full' || inputs.mode == 'build' }}
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       run: |
@@ -110,7 +110,7 @@ runs:
         $INSTALL_CMD
 
     - name: Parse build environment variables
-      if: inputs.mode == 'full' || inputs.mode == 'build'
+      if: ${{ inputs.mode == 'full' || inputs.mode == 'build' }}
       id: build-env
       shell: bash
       run: |
@@ -118,7 +118,7 @@ runs:
         echo '${{ inputs.build-env }}' | jq -r 'to_entries | .[] | "export \(.key)=\"\(.value)\""' > /tmp/build-env.sh || true
 
     - name: Build Worker
-      if: inputs.mode == 'full' || inputs.mode == 'build'
+      if: ${{ inputs.mode == 'full' || inputs.mode == 'build' }}
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       run: |
@@ -129,7 +129,7 @@ runs:
         ${{ inputs.build-command }}
 
     - name: Set deployment variables
-      if: inputs.mode == 'full' || inputs.mode == 'build'
+      if: ${{ inputs.mode == 'full' || inputs.mode == 'build' }}
       id: vars
       shell: bash
       run: |
@@ -149,7 +149,7 @@ runs:
 
     - name: Merge wrangler config for environment
       id: wrangler-config
-      if: inputs.github-environment != '' && (inputs.mode == 'full' || inputs.mode == 'build')
+      if: ${{ inputs.github-environment != '' && (inputs.mode == 'full' || inputs.mode == 'build') }}
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       run: |
@@ -278,7 +278,7 @@ runs:
         '
 
     - name: Upload Worker Version
-      if: inputs.mode == 'full' || inputs.mode == 'build'
+      if: ${{ inputs.mode == 'full' || inputs.mode == 'build' }}
       id: upload
       shell: bash
       working-directory: ${{ inputs.working-directory }}
@@ -304,7 +304,7 @@ runs:
         echo "Uploaded version: $VERSION_ID"
 
     - name: Deploy Worker Version
-      if: inputs.mode == 'full' || inputs.mode == 'deploy'
+      if: ${{ inputs.mode == 'full' || inputs.mode == 'deploy' }}
       id: deploy
       shell: bash
       working-directory: ${{ inputs.working-directory }}
@@ -326,7 +326,7 @@ runs:
         npx wrangler versions deploy "${VERSION_ID}@100%" --name "${{ inputs.worker-name }}" -y
 
     - name: Upload secrets to Cloudflare
-      if: (inputs.mode == 'full' || inputs.mode == 'deploy') && inputs.secrets-json != '' && inputs.secrets-json != '{}'
+      if: ${{ (inputs.mode == 'full' || inputs.mode == 'deploy') && inputs.secrets-json != '' && inputs.secrets-json != '{}' }}
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
