@@ -211,8 +211,8 @@ runs:
         // Merge configs
         const merged = deepMerge(baseConfig, envConfig);
 
-        // Write merged config
-        const outputPath = '/tmp/wrangler-merged.json';
+        // Write merged config to working directory so paths resolve correctly
+        const outputPath = 'wrangler-merged.json';
         fs.writeFileSync(outputPath, JSON.stringify(merged, null, 2));
 
         console.log('Base config:', baseFile);
@@ -220,7 +220,7 @@ runs:
         console.log('Merged config written to:', outputPath);
         "
 
-        echo "config-path=/tmp/wrangler-merged.json" >> $GITHUB_OUTPUT
+        echo "config-path=wrangler-merged.json" >> $GITHUB_OUTPUT
 
     - name: Upload Worker Version
       if: inputs.mode == 'full' || inputs.mode == 'build'
