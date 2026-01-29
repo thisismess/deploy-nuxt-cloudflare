@@ -258,7 +258,7 @@ runs:
         echo "Deploying version: $VERSION_ID"
 
         # Deploy the version at 100%
-        npx wrangler versions deploy "${VERSION_ID}@100%" -y
+        npx wrangler versions deploy "${VERSION_ID}@100%" --name "${{ inputs.worker-name }}" -y
 
     - name: Upload secrets to Cloudflare
       if: (inputs.mode == 'full' || inputs.mode == 'deploy') && inputs.secrets-json != '' && inputs.secrets-json != '{}'
