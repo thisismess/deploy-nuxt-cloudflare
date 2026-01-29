@@ -48,17 +48,14 @@ inputs:
     description: 'GitHub environment name - merges wrangler.{github-environment}.jsonc into base config if it exists'
     required: false
   mode:
-    description: 'Action mode: full (build+deploy), build (upload only), or deploy (deploy existing version)'
+    description: 'Action mode: full (build+upload+deploy), build (build only, no upload), or deploy (upload+deploy from .output)'
     required: false
     default: 'full'
-  version-id:
-    description: 'Worker Version ID to deploy (required when mode is deploy)'
-    required: false
 
 outputs:
   version-id:
     description: 'The uploaded/deployed Worker Version ID'
-    value: ${{ steps.upload.outputs.version-id || inputs.version-id }}
+    value: ${{ steps.upload.outputs.version-id }}
   deploy-tag:
     description: 'The tag used for the deployment'
     value: ${{ steps.vars.outputs.tag }}
@@ -129,7 +126,6 @@ runs:
         ${{ inputs.build-command }}
 
     - name: Set deployment variables
-      if: ${{ inputs.mode == 'full' || inputs.mode == 'build' }}
       id: vars
       shell: bash
       run: |
@@ -278,7 +274,7 @@ runs:
         '
 
     - name: Upload Worker Version
-      if: ${{ inputs.mode == 'full' || inputs.mode == 'build' }}
+      if: ${{ inputs.mode == 'full' || inputs.mode == 'deploy' }}
       id: upload
       shell: bash
       working-directory: ${{ inputs.working-directory }}
@@ -312,13 +308,7 @@ runs:
         CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare-api-token }}
         CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare-account-id }}
       run: |
-        # Get version ID from upload step or input
-        VERSION_ID="${{ steps.upload.outputs.version-id || inputs.version-id }}"
-
-        if [ -z "$VERSION_ID" ]; then
-          echo "::error::No version ID available. In deploy mode, you must provide version-id input."
-          exit 1
-        fi
+        VERSION_ID="${{ steps.upload.outputs.version-id }}"
 
         echo "Deploying version: $VERSION_ID"
 

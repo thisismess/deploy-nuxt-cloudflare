@@ -152,9 +152,12 @@ jobs:
             }
 ```
 
-### Parallel Builds with Separate Deploy
+### Separate Build and Deploy Steps
 
-Use `mode: build` to upload worker versions in parallel, then deploy after other jobs complete. This is useful when you have multiple deployments (e.g., GKE + Cloudflare Workers) and want to build in parallel but deploy sequentially.
+Use `mode: build` and `mode: deploy` to separate the build phase from the upload/deploy phase. This is useful when you want to:
+- Run other jobs between build and deploy
+- Control exactly when the upload to Cloudflare happens
+- Coordinate deployments with other systems
 
 ```yaml
 name: Deploy
@@ -164,54 +167,36 @@ on:
     branches: [main]
 
 jobs:
-  # Build jobs run in parallel
-  build-worker:
+  deploy:
     runs-on: ubuntu-latest
-    outputs:
-      version-id: ${{ steps.build.outputs.version-id }}
+    environment: production
     steps:
       - uses: actions/checkout@v4
 
+      # Build step: prepares .output directory with merged config
       - uses: thisismess/deploy-nuxt-cloudflare@v1
-        id: build
         with:
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           worker-name: ${{ secrets.CLOUDFLARE_WORKER_NAME }}
           github-environment: production
-          mode: build  # Only build and upload, don't deploy
+          mode: build  # Build only, no upload to Cloudflare
 
-  build-gke:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      # ... GKE build steps ...
+      # ... other steps (e.g., tests, other deployments) ...
 
-  # Deploy jobs run after builds complete
-  deploy-gke:
-    needs: [build-gke]
-    runs-on: ubuntu-latest
-    steps:
-      # ... GKE deploy steps ...
-
-  deploy-worker:
-    needs: [build-worker, deploy-gke]  # Wait for GKE deploy
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
+      # Deploy step: uploads and deploys the prepared build
       - uses: thisismess/deploy-nuxt-cloudflare@v1
         with:
           cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           worker-name: ${{ secrets.CLOUDFLARE_WORKER_NAME }}
-          mode: deploy  # Only deploy existing version
-          version-id: ${{ needs.build-worker.outputs.version-id }}
+          mode: deploy  # Upload and deploy from .output
 ```
 
 **Modes:**
 - `full` (default): Build, upload, and deploy in one step
-- `build`: Build and upload only, outputs `version-id` for later deployment
-- `deploy`: Deploy an existing version using provided `version-id`
+- `build`: Build only - prepares `.output` directory with merged config, no Cloudflare interaction
+- `deploy`: Upload and deploy from `.output` directory (must run after `build` in the same job)
 
 ## Inputs
 
@@ -230,15 +215,14 @@ jobs:
 | `deploy-tag` | Tag for the deployment | No | Short SHA |
 | `deploy-message` | Message for the deployment | No | `{actor} - {sha}` |
 | `github-environment` | GitHub environment name - merges `wrangler.{environment}.jsonc` into base config | No | - |
-| `mode` | Action mode: `full` (build+deploy), `build` (upload only), or `deploy` (deploy existing version) | No | `full` |
-| `version-id` | Worker Version ID to deploy (required when `mode` is `deploy`) | No | - |
+| `mode` | Action mode: `full` (build+upload+deploy), `build` (build only), or `deploy` (upload+deploy from .output) | No | `full` |
 
 ## Outputs
 
 | Output | Description |
 |--------|-------------|
-| `version-id` | The uploaded/deployed Worker Version ID (from upload in `build`/`full` mode, or passed through in `deploy` mode) |
-| `deploy-tag` | The tag used for the deployment (only set in `build`/`full` mode) |
+| `version-id` | The uploaded Worker Version ID (set in `full` and `deploy` modes) |
+| `deploy-tag` | The tag used for the deployment |
 
 ## Requirements
 
