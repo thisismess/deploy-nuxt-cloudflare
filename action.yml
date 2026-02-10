@@ -35,6 +35,9 @@ inputs:
     description: 'JSON object of environment variables for build step'
     required: false
     default: '{}'
+  secrets-json:
+    description: 'JSON object of secrets to upload to Cloudflare Worker (keys must not overlap with vars in wrangler config)'
+    required: false
   deploy-tag:
     description: 'Tag for the deployment (defaults to short SHA)'
     required: false
@@ -400,3 +403,61 @@ runs:
 
         # Deploy the version at 100%
         npx wrangler versions deploy "${VERSION_ID}@100%" --name "${{ inputs.worker-name }}" -y
+
+    - name: Upload secrets to Cloudflare
+      if: ${{ (inputs.mode == 'full' || inputs.mode == 'deploy') && inputs.secrets-json != '' && inputs.secrets-json != '{}' }}
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare-api-token }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare-account-id }}
+        SECRETS_JSON: ${{ inputs.secrets-json }}
+      run: |
+        # Collect var names from wrangler env config to filter out conflicts
+        VAR_NAMES="[]"
+        ENV_FILE="wrangler.${{ inputs.github-environment }}.jsonc"
+        if [ -n "${{ inputs.github-environment }}" ] && [ -f "$ENV_FILE" ]; then
+          VAR_NAMES=$(ENV_FILE="$ENV_FILE" node --eval '
+          const fs = require("fs");
+          function stripJsonComments(str) {
+            let result = "", inString = false, inLine = false, inBlock = false, i = 0;
+            while (i < str.length) {
+              if (!inLine && !inBlock && str[i] === "\"" && (i === 0 || str[i-1] !== "\\")) { inString = !inString; result += str[i]; i++; continue; }
+              if (inString) { result += str[i]; i++; continue; }
+              if (!inBlock && str.slice(i,i+2) === "//") { inLine = true; i += 2; continue; }
+              if (!inLine && str.slice(i,i+2) === "/*") { inBlock = true; i += 2; continue; }
+              if (inBlock && str.slice(i,i+2) === "*/") { inBlock = false; i += 2; continue; }
+              if (inLine && (str[i] === "\n" || str[i] === "\r")) { inLine = false; result += str[i]; i++; continue; }
+              if (inLine || inBlock) { i++; continue; }
+              result += str[i]; i++;
+            }
+            return result;
+          }
+          const cfg = JSON.parse(stripJsonComments(fs.readFileSync(process.env.ENV_FILE, "utf8")));
+          console.log(JSON.stringify(Object.keys(cfg.vars || {})));
+          ')
+        fi
+
+        # Filter out secrets that conflict with vars
+        FILTERED=$(echo "$SECRETS_JSON" | VAR_NAMES="$VAR_NAMES" node --eval '
+        const secrets = JSON.parse(require("fs").readFileSync("/dev/stdin", "utf8"));
+        const varNames = new Set(JSON.parse(process.env.VAR_NAMES));
+        const filtered = {};
+        for (const [k, v] of Object.entries(secrets)) {
+          if (varNames.has(k)) {
+            console.error(`Skipping secret "${k}" - already defined as a var in wrangler config`);
+          } else {
+            filtered[k] = v;
+          }
+        }
+        console.log(JSON.stringify(filtered));
+        ')
+
+        if [ "$FILTERED" == "{}" ]; then
+          echo "No secrets to upload (all filtered as var conflicts)"
+          exit 0
+        fi
+
+        echo "$FILTERED" > /tmp/worker-secrets.json
+        npx wrangler secret bulk /tmp/worker-secrets.json --name "${{ inputs.worker-name }}"
+        rm -f /tmp/worker-secrets.json
