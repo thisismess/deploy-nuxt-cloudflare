@@ -438,26 +438,18 @@ runs:
           ')
         fi
 
-        # Filter out secrets that conflict with vars
-        FILTERED=$(echo "$SECRETS_JSON" | VAR_NAMES="$VAR_NAMES" node --eval '
+        # Filter out secrets that conflict with vars, then upload each individually
+        echo "$SECRETS_JSON" | VAR_NAMES="$VAR_NAMES" node --eval '
         const secrets = JSON.parse(require("fs").readFileSync("/dev/stdin", "utf8"));
         const varNames = new Set(JSON.parse(process.env.VAR_NAMES));
-        const filtered = {};
         for (const [k, v] of Object.entries(secrets)) {
           if (varNames.has(k)) {
             console.error(`Skipping secret "${k}" - already defined as a var in wrangler config`);
           } else {
-            filtered[k] = v;
+            console.log(`${k}\t${v}`);
           }
         }
-        console.log(JSON.stringify(filtered));
-        ')
-
-        if [ "$FILTERED" == "{}" ]; then
-          echo "No secrets to upload (all filtered as var conflicts)"
-          exit 0
-        fi
-
-        echo "$FILTERED" > /tmp/worker-secrets.json
-        npx wrangler secret bulk /tmp/worker-secrets.json --name "${{ inputs.worker-name }}"
-        rm -f /tmp/worker-secrets.json
+        ' | while IFS=$'\t' read -r KEY VALUE; do
+          echo "Uploading secret: $KEY"
+          echo "$VALUE" | npx wrangler secret put "$KEY" --name "${{ inputs.worker-name }}"
+        done
