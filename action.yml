@@ -115,6 +115,12 @@ runs:
         # Start with user-provided build-env
         echo '${{ inputs.build-env }}' | jq -r 'to_entries | .[] | "export \(.key)=\"\(.value)\""' > /tmp/build-env.sh || true
 
+        # Also extract secrets-json as build env vars
+        if [ -n '${{ inputs.secrets-json }}' ] && [ '${{ inputs.secrets-json }}' != '{}' ]; then
+          echo "Extracting secrets for build..."
+          echo '${{ inputs.secrets-json }}' | jq -r 'to_entries | .[] | "export \(.key)=\"\(.value)\""' >> /tmp/build-env.sh || true
+        fi
+
         # Also extract vars from wrangler environment file if it exists
         ENV_FILE="wrangler.${{ inputs.github-environment }}.jsonc"
         if [ -n "${{ inputs.github-environment }}" ] && [ -f "$ENV_FILE" ]; then
