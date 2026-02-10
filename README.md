@@ -8,6 +8,7 @@ A reusable GitHub Action to build and deploy Nuxt applications to Cloudflare Wor
 - Versioned deployments with tags and messages
 - Support for build-time environment variables
 - Environment-specific bindings via `wrangler.{env}.jsonc` files
+- Worker secrets management with automatic var conflict filtering
 - Configurable Node.js version
 - Works with npm, pnpm, or yarn
 - Build/deploy modes for coordinated CI workflows
@@ -80,7 +81,7 @@ Nuxt/Nitro generates the base wrangler config during build (with `main`, `assets
 }
 ```
 
-The action merges your environment file into the Nuxt-generated `.output/server/wrangler.json` after the build step.
+The `vars` from your environment file are available as environment variables during the Nuxt build (for `NUXT_PUBLIC_*` etc.), and the full config is merged into the Nuxt-generated `.output/server/wrangler.json` after the build step.
 
 **2. Configure your workflow with GitHub environments:**
 
@@ -136,6 +137,26 @@ jobs:
               "NUXT_PUBLIC_API_BASE": "${{ vars.API_BASE }}"
             }
 ```
+
+### With Worker Secrets
+
+Use `secrets-json` to upload encrypted secrets to your Worker. Secrets are also available as environment variables during the Nuxt build and are uploaded to Cloudflare after deployment. Any secrets that share a name with `vars` in your wrangler environment config are automatically skipped to avoid conflicts.
+
+```yaml
+- uses: thisismess/deploy-nuxt-cloudflare@v1
+  with:
+    cloudflare-api-token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    worker-name: ${{ secrets.CLOUDFLARE_WORKER_NAME }}
+    github-environment: production
+    secrets-json: |
+      {
+        "API_SECRET_KEY": "${{ secrets.API_SECRET_KEY }}",
+        "DATABASE_URL": "${{ secrets.DATABASE_URL }}"
+      }
+```
+
+> **Note:** Secret names must not overlap with `vars` defined in your `wrangler.{environment}.jsonc`. Use `vars` for public configuration (URLs, feature flags) and `secrets` for sensitive values (API keys, credentials).
 
 ### Separate Build and Deploy Steps
 
@@ -196,6 +217,7 @@ jobs:
 | `install-command` | Command to install dependencies (auto-detected from `package-manager` if not set) | No | `npm ci` |
 | `package-manager` | Package manager for caching (`npm`, `pnpm`, `yarn`, or `none` to disable) | No | `npm` |
 | `build-env` | JSON object of environment variables for build | No | `{}` |
+| `secrets-json` | JSON object of secrets to upload to Worker (also available during build) | No | - |
 | `deploy-tag` | Tag for the deployment | No | Short SHA |
 | `deploy-message` | Message for the deployment | No | `{actor} - {sha}` |
 | `github-environment` | GitHub environment name - merges `wrangler.{environment}.jsonc` into base config | No | - |
