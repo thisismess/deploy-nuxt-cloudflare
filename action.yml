@@ -111,14 +111,17 @@ runs:
       id: build-env
       shell: bash
       working-directory: ${{ inputs.working-directory }}
+      env:
+        BUILD_ENV: ${{ inputs.build-env }}
+        SECRETS_JSON: ${{ inputs.secrets-json }}
       run: |
         # Start with user-provided build-env
-        echo '${{ inputs.build-env }}' | jq -r 'to_entries | .[] | "export \(.key)=\"\(.value)\""' > /tmp/build-env.sh || true
+        echo "$BUILD_ENV" | jq -r 'to_entries | .[] | "export \(.key)=\"\(.value)\""' > /tmp/build-env.sh || true
 
         # Also extract secrets-json as build env vars
-        if [ -n '${{ inputs.secrets-json }}' ] && [ '${{ inputs.secrets-json }}' != '{}' ]; then
+        if [ -n "$SECRETS_JSON" ] && [ "$SECRETS_JSON" != '{}' ]; then
           echo "Extracting secrets for build..."
-          echo '${{ inputs.secrets-json }}' | jq -r 'to_entries | .[] | "export \(.key)=\"\(.value)\""' >> /tmp/build-env.sh || true
+          echo "$SECRETS_JSON" | jq -r 'to_entries | .[] | "export \(.key)=\"\(.value)\""' >> /tmp/build-env.sh || true
         fi
 
         # Also extract vars from wrangler environment file if it exists
