@@ -121,7 +121,20 @@ runs:
         # Also extract secrets-json as build env vars
         if [ -n "$SECRETS_JSON" ] && [ "$SECRETS_JSON" != '{}' ]; then
           echo "Extracting secrets for build..."
-          echo "$SECRETS_JSON" | jq -r 'to_entries | .[] | "export \(.key)=\"\(.value)\""' >> /tmp/build-env.sh || true
+          echo "$SECRETS_JSON" | node --eval '
+          const bs = "\\";
+          const raw = require("fs").readFileSync("/dev/stdin", "utf8");
+          // Fix invalid JSON escape sequences (e.g. \3, \*, \o) produced when
+          // GitHub interpolates secret values containing backslashes into JSON.
+          const sanitized = raw.replace(/\\[\s\S]/g, function(m) {
+            return "\"\\\/bfnrtu".indexOf(m[1]) >= 0 ? m : bs + m;
+          });
+          const obj = JSON.parse(sanitized);
+          for (const [k, v] of Object.entries(obj)) {
+            const escaped = String(v).replace(/"/g, bs + "\"");
+            console.log("export " + k + "=\"" + escaped + "\"");
+          }
+          ' >> /tmp/build-env.sh || true
         fi
 
         # Also extract vars from wrangler environment file if it exists
@@ -456,7 +469,14 @@ runs:
 
         # Filter out secrets that conflict with vars, then upload each individually
         echo "$SECRETS_JSON" | VAR_NAMES="$VAR_NAMES" node --eval '
-        const secrets = JSON.parse(require("fs").readFileSync("/dev/stdin", "utf8"));
+        const bs = "\\";
+        const raw = require("fs").readFileSync("/dev/stdin", "utf8");
+        // Fix invalid JSON escape sequences produced when GitHub interpolates
+        // secret values containing backslashes (e.g. \3) into a JSON blob.
+        const sanitized = raw.replace(/\\[\s\S]/g, function(m) {
+          return "\"\\\/bfnrtu".indexOf(m[1]) >= 0 ? m : bs + m;
+        });
+        const secrets = JSON.parse(sanitized);
         const varNames = new Set(JSON.parse(process.env.VAR_NAMES));
         for (const [k, v] of Object.entries(secrets)) {
           if (varNames.has(k)) {
