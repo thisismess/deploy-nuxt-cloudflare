@@ -304,6 +304,10 @@ runs:
               }
               if (!config.assets) {
                 config.assets = { directory: "./public", binding: "ASSETS" };
+              } else if (config.assets.directory === "../public") {
+                // Fix relative path: ../public was relative to .output/server/,
+                // but this config is being placed at .output/wrangler.json
+                config.assets.directory = "./public";
               }
               if (!config.compatibility_flags) {
                 config.compatibility_flags = ["nodejs_compat"];
