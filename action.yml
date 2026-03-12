@@ -274,8 +274,46 @@ runs:
         elif [ -f ".output/wrangler.json" ]; then
           NITRO_CONFIG=".output/wrangler.json"
         else
-          echo "::error::No Nuxt-generated wrangler.json found in .output/"
-          exit 1
+          # No Nitro-generated config (e.g. NuxtHub's cloudflare-module preset).
+          # Fall back to the project's wrangler.jsonc as the base config.
+          if [ -f "wrangler.jsonc" ]; then
+            echo "::notice::No Nuxt-generated wrangler.json in .output/, using project wrangler.jsonc as base"
+            NITRO_CONFIG=".output/wrangler.json"
+            mkdir -p .output
+            # Strip JSONC comments and copy to .output/wrangler.json
+            node --eval '
+              const fs = require("fs");
+              function stripJsonComments(str) {
+                let result = "", inString = false, inLine = false, inBlock = false, i = 0;
+                while (i < str.length) {
+                  if (!inLine && !inBlock && str[i] === "\"" && (i === 0 || str[i-1] !== "\\")) { inString = !inString; result += str[i]; i++; continue; }
+                  if (inString) { result += str[i]; i++; continue; }
+                  if (!inBlock && str.slice(i,i+2) === "//") { inLine = true; i += 2; continue; }
+                  if (!inLine && str.slice(i,i+2) === "/*") { inBlock = true; i += 2; continue; }
+                  if (inBlock && str.slice(i,i+2) === "*/") { inBlock = false; i += 2; continue; }
+                  if (inLine && (str[i] === "\n" || str[i] === "\r")) { inLine = false; result += str[i]; i++; continue; }
+                  if (inLine || inBlock) { i++; continue; }
+                  result += str[i]; i++;
+                }
+                return result;
+              }
+              const config = JSON.parse(stripJsonComments(fs.readFileSync("wrangler.jsonc", "utf8")));
+              // Add standard Nitro output paths if not already set
+              if (!config.main) {
+                config.main = fs.existsSync(".output/server/index.mjs") ? "server/index.mjs" : "index.mjs";
+              }
+              if (!config.assets) {
+                config.assets = { directory: "./public", binding: "ASSETS" };
+              }
+              if (!config.compatibility_flags) {
+                config.compatibility_flags = ["nodejs_compat"];
+              }
+              fs.writeFileSync(".output/wrangler.json", JSON.stringify(config, null, 2));
+            '
+          else
+            echo "::error::No Nuxt-generated wrangler.json found in .output/ and no wrangler.jsonc in project root"
+            exit 1
+          fi
         fi
 
         echo "Merging $ENV_FILE into $NITRO_CONFIG..."
