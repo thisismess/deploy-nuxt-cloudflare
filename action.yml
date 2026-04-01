@@ -433,6 +433,39 @@ runs:
         console.log("Merged config written to:", nitroConfigPath);
         '
 
+    - name: Apply D1 Migrations
+      if: ${{ inputs.mode == 'full' || inputs.mode == 'deploy' }}
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare-api-token }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare-account-id }}
+      run: |
+        CONFIG=".output/wrangler.json"
+        if [ ! -f "$CONFIG" ]; then
+          echo "::notice::No merged wrangler config found, skipping D1 migrations"
+          exit 0
+        fi
+
+        # Extract D1 database names from merged config
+        D1_NAMES=$(node --eval '
+          const fs = require("fs");
+          const config = JSON.parse(fs.readFileSync("'"$CONFIG"'", "utf8"));
+          const dbs = config.d1_databases || [];
+          dbs.forEach(db => console.log(db.name));
+        ')
+
+        if [ -z "$D1_NAMES" ]; then
+          echo "::notice::No D1 databases found in config, skipping migrations"
+          exit 0
+        fi
+
+        # Apply migrations for each D1 database
+        while IFS= read -r DB_NAME; do
+          echo "Applying migrations for D1 database: $DB_NAME"
+          npx wrangler d1 migrations apply "$DB_NAME" --remote -c "$CONFIG"
+        done <<< "$D1_NAMES"
+
     - name: Upload Worker Version
       if: ${{ inputs.mode == 'full' || inputs.mode == 'deploy' }}
       id: upload
