@@ -478,7 +478,7 @@ runs:
           const clean = "'"$CONFIG"'".endsWith(".json") ? raw : stripJsonComments(raw);
           const config = JSON.parse(clean);
           const dbs = config.d1_databases || [];
-          dbs.forEach(db => console.log(db.name));
+          dbs.forEach(db => console.log(db.database_name || db.name));
         ')
 
         if [ -z "$D1_NAMES" ]; then
