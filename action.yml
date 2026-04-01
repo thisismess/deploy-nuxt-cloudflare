@@ -441,9 +441,14 @@ runs:
         CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare-api-token }}
         CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare-account-id }}
       run: |
-        CONFIG=".output/wrangler.json"
-        if [ ! -f "$CONFIG" ]; then
-          echo "::notice::No merged wrangler config found, skipping D1 migrations"
+        if [ -f ".output/server/wrangler.json" ]; then
+          CONFIG=".output/server/wrangler.json"
+        elif [ -f ".output/wrangler.json" ]; then
+          CONFIG=".output/wrangler.json"
+        elif [ -f "wrangler.jsonc" ]; then
+          CONFIG="wrangler.jsonc"
+        else
+          echo "::notice::No wrangler config found, skipping D1 migrations"
           exit 0
         fi
 
