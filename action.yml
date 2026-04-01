@@ -441,81 +441,32 @@ runs:
         CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare-api-token }}
         CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare-account-id }}
       run: |
-        # Find the merged wrangler config
-        # The merge step combines base wrangler.jsonc with the environment-specific config
-        CONFIG=""
-        for f in ".output/server/wrangler.json" ".output/wrangler.json" "wrangler.jsonc" "wrangler.toml"; do
-          if [ -f "$f" ]; then
-            CONFIG="$f"
-            break
-          fi
-        done
-
-        if [ -z "$CONFIG" ]; then
-          echo "::notice::No wrangler config found, skipping D1 migrations"
+        if [ ! -d "server/db/migrations" ]; then
+          echo "::notice::No migrations directory found, skipping D1 migrations"
           exit 0
         fi
 
-        echo "Using config: $CONFIG"
-
-        # Extract D1 database names from config (strip JSONC comments first)
-        D1_NAMES=$(node --eval '
-          const fs = require("fs");
-          function stripJsonComments(str) {
-            let result = "", inString = false, escape = false;
-            for (let i = 0; i < str.length; i++) {
-              const ch = str[i];
-              if (escape) { result += ch; escape = false; continue; }
-              if (ch === "\\" && inString) { result += ch; escape = true; continue; }
-              if (ch === "\"") { inString = !inString; result += ch; continue; }
-              if (!inString && ch === "/" && str[i+1] === "/") { while (i < str.length && str[i] !== "\n") i++; continue; }
-              if (!inString && ch === "/" && str[i+1] === "*") { i += 2; while (i < str.length && !(str[i] === "*" && str[i+1] === "/")) i++; i++; continue; }
-              result += ch;
-            }
-            return result;
-          }
-          const raw = fs.readFileSync("'"$CONFIG"'", "utf8");
-          const clean = "'"$CONFIG"'".endsWith(".json") ? raw : stripJsonComments(raw);
-          const config = JSON.parse(clean);
-          const dbs = config.d1_databases || [];
-          dbs.forEach(db => console.log(db.database_name || db.name));
-        ')
-
-        if [ -z "$D1_NAMES" ]; then
-          echo "::notice::No D1 databases found in config, skipping migrations"
+        if [ ! -f "wrangler.jsonc" ]; then
+          echo "::notice::No wrangler.jsonc found, skipping D1 migrations"
           exit 0
         fi
 
-        # Inject migrations_dir into the config so wrangler finds migrations in the source tree
-        # The config is in .output/server/ but migrations live in server/db/migrations/
-        node --eval '
-          const fs = require("fs");
-          const config = JSON.parse(fs.readFileSync("'"$CONFIG"'", "utf8"));
-          const configDir = require("path").dirname(require("path").resolve("'"$CONFIG"'"));
-          const cwd = process.cwd();
-          if (config.d1_databases) {
-            config.d1_databases.forEach(db => {
-              if (!db.migrations_dir) {
-                // Look for migrations in common locations
-                const dirs = ["server/db/migrations/sqlite", "server/db/migrations", "db/migrations"];
-                for (const dir of dirs) {
-                  if (fs.existsSync(dir)) {
-                    db.migrations_dir = require("path").relative(configDir, require("path").resolve(cwd, dir));
-                    console.log("Set migrations_dir for " + (db.database_name || db.name) + ": " + db.migrations_dir);
-                    break;
-                  }
-                }
-              }
-            });
-            fs.writeFileSync("'"$CONFIG"'", JSON.stringify(config, null, 2));
-          }
-        '
+        # Get database names from config
+        DB_NAMES=$(node -e "
+          const fs = require('fs');
+          const c = JSON.parse(fs.readFileSync('wrangler.jsonc','utf8').replace(/\/\/.*/g,'').replace(/,\s*([}\]])/g,'\$1'));
+          (c.d1_databases||[]).forEach(d => console.log(d.database_name||d.name));
+        ")
 
-        # Apply migrations for each D1 database
-        while IFS= read -r DB_NAME; do
-          echo "Applying migrations for D1 database: $DB_NAME"
-          npx wrangler d1 migrations apply "$DB_NAME" --remote -c "$CONFIG"
-        done <<< "$D1_NAMES"
+        if [ -z "$DB_NAMES" ]; then
+          echo "::notice::No D1 databases in config, skipping migrations"
+          exit 0
+        fi
+
+        while IFS= read -r DB; do
+          echo "Applying migrations for: $DB"
+          npx wrangler d1 migrations apply "$DB" --remote -c wrangler.jsonc
+        done <<< "$DB_NAMES"
 
     - name: Upload Worker Version
       if: ${{ inputs.mode == 'full' || inputs.mode == 'deploy' }}
