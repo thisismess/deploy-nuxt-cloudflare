@@ -8,6 +8,7 @@ A reusable GitHub Action to build and deploy Nuxt applications to Cloudflare Wor
 - Versioned deployments with tags and messages
 - Support for build-time environment variables
 - Environment-specific bindings via `wrangler.{env}.jsonc` files
+- Automatic D1 database migrations
 - Worker secrets management with automatic var conflict filtering
 - Configurable Node.js version
 - Works with npm, pnpm, or yarn
@@ -108,6 +109,36 @@ jobs:
 ```
 
 The action will deep-merge `wrangler.{github-environment}.jsonc` into the base `wrangler.jsonc` before deploying. This allows multiple branches to share the same environment config, or unique branches to have unique configs.
+
+### D1 Database Migrations
+
+The action automatically detects and applies D1 database migrations during deployment. No additional workflow steps are needed.
+
+**How it works:**
+
+1. The action checks the environment-specific wrangler config (e.g. `wrangler.production.jsonc`) for `d1_databases` entries
+2. If D1 databases are found, it looks for a migrations directory (typically `server/db/migrations/sqlite`)
+3. Migrations are applied to each D1 database via `wrangler d1 migrations apply` before the worker is uploaded
+
+**Setup:**
+
+Add a `d1_databases` binding to your environment-specific wrangler config with a `migrations_dir` pointing to your migrations:
+
+```jsonc
+// wrangler.production.jsonc
+{
+    "d1_databases": [
+        {
+            "binding": "DB",
+            "database_name": "my-app",
+            "database_id": "your-database-id",
+            "migrations_dir": "server/db/migrations/sqlite"
+        }
+    ]
+}
+```
+
+Migrations are applied automatically on every deploy. If no D1 databases or migrations directory are found, the step is silently skipped.
 
 ### Full Example (Staging + Production)
 
