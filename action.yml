@@ -486,6 +486,31 @@ runs:
           exit 0
         fi
 
+        # Inject migrations_dir into the config so wrangler finds migrations in the source tree
+        # The config is in .output/server/ but migrations live in server/db/migrations/
+        node --eval '
+          const fs = require("fs");
+          const config = JSON.parse(fs.readFileSync("'"$CONFIG"'", "utf8"));
+          const configDir = require("path").dirname(require("path").resolve("'"$CONFIG"'"));
+          const cwd = process.cwd();
+          if (config.d1_databases) {
+            config.d1_databases.forEach(db => {
+              if (!db.migrations_dir) {
+                // Look for migrations in common locations
+                const dirs = ["server/db/migrations/sqlite", "server/db/migrations", "db/migrations"];
+                for (const dir of dirs) {
+                  if (fs.existsSync(dir)) {
+                    db.migrations_dir = require("path").relative(configDir, require("path").resolve(cwd, dir));
+                    console.log("Set migrations_dir for " + (db.database_name || db.name) + ": " + db.migrations_dir);
+                    break;
+                  }
+                }
+              }
+            });
+            fs.writeFileSync("'"$CONFIG"'", JSON.stringify(config, null, 2));
+          }
+        '
+
         # Apply migrations for each D1 database
         while IFS= read -r DB_NAME; do
           echo "Applying migrations for D1 database: $DB_NAME"
