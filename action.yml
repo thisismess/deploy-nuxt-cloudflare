@@ -441,21 +441,42 @@ runs:
         CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare-api-token }}
         CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare-account-id }}
       run: |
-        if [ -f ".output/server/wrangler.json" ]; then
-          CONFIG=".output/server/wrangler.json"
-        elif [ -f ".output/wrangler.json" ]; then
-          CONFIG=".output/wrangler.json"
-        elif [ -f "wrangler.jsonc" ]; then
-          CONFIG="wrangler.jsonc"
-        else
+        # Find the merged wrangler config
+        # The merge step combines base wrangler.jsonc with the environment-specific config
+        CONFIG=""
+        for f in ".output/server/wrangler.json" ".output/wrangler.json" "wrangler.jsonc" "wrangler.toml"; do
+          if [ -f "$f" ]; then
+            CONFIG="$f"
+            break
+          fi
+        done
+
+        if [ -z "$CONFIG" ]; then
           echo "::notice::No wrangler config found, skipping D1 migrations"
           exit 0
         fi
 
-        # Extract D1 database names from merged config
+        echo "Using config: $CONFIG"
+
+        # Extract D1 database names from config (strip JSONC comments first)
         D1_NAMES=$(node --eval '
           const fs = require("fs");
-          const config = JSON.parse(fs.readFileSync("'"$CONFIG"'", "utf8"));
+          function stripJsonComments(str) {
+            let result = "", inString = false, escape = false;
+            for (let i = 0; i < str.length; i++) {
+              const ch = str[i];
+              if (escape) { result += ch; escape = false; continue; }
+              if (ch === "\\" && inString) { result += ch; escape = true; continue; }
+              if (ch === "\"") { inString = !inString; result += ch; continue; }
+              if (!inString && ch === "/" && str[i+1] === "/") { while (i < str.length && str[i] !== "\n") i++; continue; }
+              if (!inString && ch === "/" && str[i+1] === "*") { i += 2; while (i < str.length && !(str[i] === "*" && str[i+1] === "/")) i++; i++; continue; }
+              result += ch;
+            }
+            return result;
+          }
+          const raw = fs.readFileSync("'"$CONFIG"'", "utf8");
+          const clean = "'"$CONFIG"'".endsWith(".json") ? raw : stripJsonComments(raw);
+          const config = JSON.parse(clean);
           const dbs = config.d1_databases || [];
           dbs.forEach(db => console.log(db.name));
         ')
