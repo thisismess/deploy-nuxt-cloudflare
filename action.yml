@@ -446,15 +446,22 @@ runs:
           exit 0
         fi
 
-        if [ ! -f "wrangler.jsonc" ]; then
-          echo "::notice::No wrangler.jsonc found, skipping D1 migrations"
+        # Find config with D1 bindings — check environment-specific first, then base
+        CONFIG=""
+        ENV_FILE="wrangler.${{ inputs.github-environment }}.jsonc"
+        if [ -n "${{ inputs.github-environment }}" ] && [ -f "$ENV_FILE" ]; then
+          CONFIG="$ENV_FILE"
+        elif [ -f "wrangler.jsonc" ]; then
+          CONFIG="wrangler.jsonc"
+        else
+          echo "::notice::No wrangler config found, skipping D1 migrations"
           exit 0
         fi
 
         # Get database names from config
         DB_NAMES=$(node -e "
           const fs = require('fs');
-          const c = JSON.parse(fs.readFileSync('wrangler.jsonc','utf8').replace(/\/\/.*/g,'').replace(/,\s*([}\]])/g,'\$1'));
+          const c = JSON.parse(fs.readFileSync('$CONFIG','utf8').replace(/\/\/.*/g,'').replace(/,\s*([}\]])/g,'\$1'));
           (c.d1_databases||[]).forEach(d => console.log(d.database_name||d.name));
         ")
 
@@ -464,8 +471,8 @@ runs:
         fi
 
         while IFS= read -r DB; do
-          echo "Applying migrations for: $DB"
-          npx wrangler d1 migrations apply "$DB" --remote -c wrangler.jsonc
+          echo "Applying migrations for: $DB (config: $CONFIG)"
+          npx wrangler d1 migrations apply "$DB" --remote -c "$CONFIG"
         done <<< "$DB_NAMES"
 
     - name: Upload Worker Version
