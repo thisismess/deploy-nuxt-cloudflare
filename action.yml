@@ -91,21 +91,6 @@ runs:
         cache: ${{ inputs.package-manager != 'none' && inputs.package-manager || '' }}
         cache-dependency-path: ${{ steps.lockfile.outputs.path }}
 
-    - name: Install dependencies
-      if: ${{ inputs.mode == 'full' || inputs.mode == 'build' }}
-      shell: bash
-      working-directory: ${{ inputs.working-directory }}
-      run: |
-        # Auto-detect install command based on package manager if using default
-        INSTALL_CMD="${{ inputs.install-command }}"
-        if [ "$INSTALL_CMD" == "npm ci" ]; then
-          case "${{ inputs.package-manager }}" in
-            pnpm) INSTALL_CMD="pnpm install --frozen-lockfile" ;;
-            yarn) INSTALL_CMD="yarn install --frozen-lockfile" ;;
-          esac
-        fi
-        $INSTALL_CMD
-
     - name: Parse build environment variables
       if: ${{ inputs.mode == 'full' || inputs.mode == 'build' }}
       id: build-env
@@ -226,6 +211,26 @@ runs:
           echo "No build environment variables set"
         fi
         echo "::endgroup::"
+
+    - name: Install dependencies
+      if: ${{ inputs.mode == 'full' || inputs.mode == 'build' }}
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        # Source build environment variables if they exist
+        if [ -f /tmp/build-env.sh ]; then
+          source /tmp/build-env.sh
+        fi
+
+        # Auto-detect install command based on package manager if using default
+        INSTALL_CMD="${{ inputs.install-command }}"
+        if [ "$INSTALL_CMD" == "npm ci" ]; then
+          case "${{ inputs.package-manager }}" in
+            pnpm) INSTALL_CMD="pnpm install --frozen-lockfile" ;;
+            yarn) INSTALL_CMD="yarn install --frozen-lockfile" ;;
+          esac
+        fi
+        $INSTALL_CMD
 
     - name: Build Worker
       if: ${{ inputs.mode == 'full' || inputs.mode == 'build' }}
