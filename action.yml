@@ -426,7 +426,7 @@ runs:
 
         // Parse build-env and add as base vars (wrangler env vars take precedence)
         console.log("Build env JSON:", buildEnvJson);
-        const buildEnv = JSON.parse(buildEnvJson);
+        const buildEnv = JSON.parse(buildEnvJson.replace(/,\s*([}\]])/g, "$1"));
         if (Object.keys(buildEnv).length > 0) {
           envConfig.vars = { ...buildEnv, ...(envConfig.vars || {}) };
         }
