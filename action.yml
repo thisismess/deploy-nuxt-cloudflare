@@ -475,6 +475,21 @@ runs:
           npx wrangler d1 migrations apply "$DB" --remote -c "$CONFIG"
         done <<< "$DB_NAMES"
 
+    - name: Echo merged wrangler config
+      if: ${{ inputs.mode == 'full' || inputs.mode == 'deploy' }}
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        echo "::group::Merged wrangler config"
+        if [ -f ".output/server/wrangler.json" ]; then
+          cat .output/server/wrangler.json
+        elif [ -f ".output/wrangler.json" ]; then
+          cat .output/wrangler.json
+        else
+          echo "No wrangler config found in .output/"
+        fi
+        echo "::endgroup::"
+
     - name: Upload Worker Version
       if: ${{ inputs.mode == 'full' || inputs.mode == 'deploy' }}
       id: upload
