@@ -415,17 +415,17 @@ runs:
 
         // Read Nuxt-generated config (has main, assets, etc.)
         const rawNitro = fs.readFileSync(nitroConfigPath, "utf8");
-        console.log("Raw Nitro config:", rawNitro.substring(0, 200));
+        console.log("Raw Nitro config:", rawNitro);
         const nitroConfig = JSON.parse(rawNitro.replace(/,\s*([}\]])/g, "$1"));
 
         // Read and parse environment config (has bindings, vars, etc.)
         const rawEnv = fs.readFileSync(envFilePath, "utf8");
         const cleanedEnv = stripJsonComments(rawEnv).replace(/,\s*([}\]])/g, "$1");
-        console.log("Cleaned env config (first 300):", cleanedEnv.substring(0, 300));
+        console.log("Cleaned env config:", cleanedEnv);
         const envConfig = JSON.parse(cleanedEnv);
 
         // Parse build-env and add as base vars (wrangler env vars take precedence)
-        console.log("Build env JSON (first 200):", buildEnvJson.substring(0, 200));
+        console.log("Build env JSON:", buildEnvJson);
         const buildEnv = JSON.parse(buildEnvJson);
         if (Object.keys(buildEnv).length > 0) {
           envConfig.vars = { ...buildEnv, ...(envConfig.vars || {}) };
