@@ -532,6 +532,9 @@ runs:
         # Deploy the version at 100%
         npx wrangler versions deploy "${VERSION_ID}@100%" --name "${{ inputs.worker-name }}" -y
 
+        # Deploy triggers (routes, custom domains, cron schedules)
+        npx wrangler triggers deploy --name "${{ inputs.worker-name }}" --cwd .output
+
     - name: Upload secrets to Cloudflare
       if: ${{ (inputs.mode == 'full' || inputs.mode == 'deploy') && inputs.secrets-json != '' && inputs.secrets-json != '{}' }}
       shell: bash
