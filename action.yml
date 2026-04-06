@@ -197,7 +197,7 @@ runs:
           }
 
           const envFilePath = process.env.ENV_FILE;
-          const envConfig = JSON.parse(stripJsonComments(fs.readFileSync(envFilePath, "utf8")));
+          const envConfig = JSON.parse(stripJsonComments(fs.readFileSync(envFilePath, "utf8")).replace(/,\s*([}\]])/g, "$1"));
 
           // Extract vars and output as shell exports
           if (envConfig.vars) {
@@ -297,7 +297,10 @@ runs:
                 }
                 return result;
               }
-              const config = JSON.parse(stripJsonComments(fs.readFileSync("wrangler.jsonc", "utf8")));
+              const stripped = stripJsonComments(fs.readFileSync("wrangler.jsonc", "utf8"));
+              // Remove trailing commas (valid in JSONC, invalid in JSON)
+              const cleaned = stripped.replace(/,\s*([}\]])/g, "$1");
+              const config = JSON.parse(cleaned);
               // Add standard Nitro output paths if not already set
               if (!config.main) {
                 config.main = fs.existsSync(".output/server/index.mjs") ? "server/index.mjs" : "index.mjs";
@@ -414,7 +417,7 @@ runs:
         const nitroConfig = JSON.parse(fs.readFileSync(nitroConfigPath, "utf8"));
 
         // Read and parse environment config (has bindings, vars, etc.)
-        const envConfig = JSON.parse(stripJsonComments(fs.readFileSync(envFilePath, "utf8")));
+        const envConfig = JSON.parse(stripJsonComments(fs.readFileSync(envFilePath, "utf8")).replace(/,\s*([}\]])/g, "$1"));
 
         // Parse build-env and add as base vars (wrangler env vars take precedence)
         const buildEnv = JSON.parse(buildEnvJson);
@@ -564,7 +567,7 @@ runs:
             }
             return result;
           }
-          const cfg = JSON.parse(stripJsonComments(fs.readFileSync(process.env.ENV_FILE, "utf8")));
+          const cfg = JSON.parse(stripJsonComments(fs.readFileSync(process.env.ENV_FILE, "utf8")).replace(/,\s*([}\]])/g, "$1"));
           console.log(JSON.stringify(Object.keys(cfg.vars || {})));
           ')
         fi
