@@ -115,8 +115,16 @@ runs:
         BUILD_ENV: ${{ inputs.build-env }}
         SECRETS_JSON: ${{ inputs.secrets-json }}
       run: |
-        # Start with user-provided build-env
-        echo "$BUILD_ENV" | jq -r 'to_entries | .[] | "export \(.key)=\"\(.value)\""' > /tmp/build-env.sh || true
+        # Start with user-provided build-env (use node to tolerate trailing commas)
+        echo "$BUILD_ENV" | node --eval '
+        const raw = require("fs").readFileSync("/dev/stdin", "utf8");
+        const cleaned = raw.replace(/,\s*([}\]])/g, "$1");
+        const obj = JSON.parse(cleaned);
+        for (const [k, v] of Object.entries(obj)) {
+          const escaped = String(v).replace(/"/g, "\\\"");
+          console.log("export " + k + "=\"" + escaped + "\"");
+        }
+        ' > /tmp/build-env.sh || true
 
         # Also extract secrets-json as build env vars
         if [ -n "$SECRETS_JSON" ] && [ "$SECRETS_JSON" != '{}' ]; then
@@ -415,17 +423,14 @@ runs:
 
         // Read Nuxt-generated config (has main, assets, etc.)
         const rawNitro = fs.readFileSync(nitroConfigPath, "utf8");
-        console.log("Raw Nitro config:", rawNitro);
         const nitroConfig = JSON.parse(rawNitro.replace(/,\s*([}\]])/g, "$1"));
 
         // Read and parse environment config (has bindings, vars, etc.)
         const rawEnv = fs.readFileSync(envFilePath, "utf8");
         const cleanedEnv = stripJsonComments(rawEnv).replace(/,\s*([}\]])/g, "$1");
-        console.log("Cleaned env config:", cleanedEnv);
         const envConfig = JSON.parse(cleanedEnv);
 
         // Parse build-env and add as base vars (wrangler env vars take precedence)
-        console.log("Build env JSON:", buildEnvJson);
         const buildEnv = JSON.parse(buildEnvJson.replace(/,\s*([}\]])/g, "$1"));
         if (Object.keys(buildEnv).length > 0) {
           envConfig.vars = { ...buildEnv, ...(envConfig.vars || {}) };
@@ -437,9 +442,6 @@ runs:
         // Write merged config back to the Nitro output location
         fs.writeFileSync(nitroConfigPath, JSON.stringify(merged, null, 2));
 
-        console.log("Nitro config:", nitroConfigPath);
-        console.log("Environment config:", envFilePath);
-        console.log("Merged config written to:", nitroConfigPath);
         '
 
     - name: Apply D1 Migrations
