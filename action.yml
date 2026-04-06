@@ -414,7 +414,9 @@ runs:
         const buildEnvJson = process.env.BUILD_ENV || "{}";
 
         // Read Nuxt-generated config (has main, assets, etc.)
-        const nitroConfig = JSON.parse(fs.readFileSync(nitroConfigPath, "utf8"));
+        const rawNitro = fs.readFileSync(nitroConfigPath, "utf8");
+        console.log("Raw Nitro config:", rawNitro.substring(0, 200));
+        const nitroConfig = JSON.parse(rawNitro.replace(/,\s*([}\]])/g, "$1"));
 
         // Read and parse environment config (has bindings, vars, etc.)
         const envConfig = JSON.parse(stripJsonComments(fs.readFileSync(envFilePath, "utf8")).replace(/,\s*([}\]])/g, "$1"));
