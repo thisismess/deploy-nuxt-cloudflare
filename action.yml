@@ -339,7 +339,7 @@ runs:
         echo "Merging $ENV_FILE into $NITRO_CONFIG..."
 
         # Pass file paths via environment variables to avoid escaping issues
-        NITRO_CONFIG="$NITRO_CONFIG" ENV_FILE="$ENV_FILE" BUILD_ENV='${{ inputs.build-env }}' node --eval '
+        NITRO_CONFIG="$NITRO_CONFIG" ENV_FILE="$ENV_FILE" node --eval '
         const fs = require("fs");
 
         // Strip JSONC comments (handles strings correctly to not break URLs)
@@ -424,7 +424,6 @@ runs:
 
         const nitroConfigPath = process.env.NITRO_CONFIG;
         const envFilePath = process.env.ENV_FILE;
-        const buildEnvJson = process.env.BUILD_ENV || "{}";
 
         // Read Nuxt-generated config (has main, assets, etc.)
         const rawNitro = fs.readFileSync(nitroConfigPath, "utf8");
@@ -434,12 +433,6 @@ runs:
         const rawEnv = fs.readFileSync(envFilePath, "utf8");
         const cleanedEnv = stripJsonComments(rawEnv).replace(/,\s*([}\]])/g, "$1");
         const envConfig = JSON.parse(cleanedEnv);
-
-        // Parse build-env and add as base vars (wrangler env vars take precedence)
-        const buildEnv = JSON.parse(buildEnvJson.replace(/,\s*([}\]])/g, "$1"));
-        if (Object.keys(buildEnv).length > 0) {
-          envConfig.vars = { ...buildEnv, ...(envConfig.vars || {}) };
-        }
 
         // Merge: Nitro config + environment overrides
         const merged = deepMerge(nitroConfig, envConfig);
