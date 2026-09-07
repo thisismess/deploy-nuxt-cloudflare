@@ -81,7 +81,10 @@ runs:
       if: ${{ (inputs.mode == 'full' || inputs.mode == 'build') && inputs.package-manager == 'pnpm' }}
       uses: pnpm/action-setup@v4
       with:
-        version: latest
+        # Pinned: this step runs before Setup Node.js (setup-node's pnpm cache
+        # needs pnpm on PATH), and pnpm 12+ has a preinstall script that shells
+        # out to node, which fails with "node: not found". ~ JWS
+        version: 10
 
     - name: Setup Node.js
       if: ${{ inputs.mode == 'full' || inputs.mode == 'build' }}
